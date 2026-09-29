@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LUCENTO — Карта регионов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#180b10; --card:#22101a; --line:rgba(212,168,90,.22);
+  --gold:#d4a85a; --gold-hi:#e9c67e; --gold-dk:#a8823f;
+  --wine:#6b2233; --wine-hi:#8a3348; --wine-dk:#4a1622;
+  --text:#f0e2d0; --muted:#b39c8a; --ink:#2a1218;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Manrope',system-ui,sans-serif}
+a{color:inherit}
+.top{display:flex;align-items:center;gap:32px;padding:20px 5vw;border-bottom:1px solid var(--line)}
+.top .logo{font-family:'Cormorant Garamond',serif;font-size:26px;letter-spacing:.14em;text-decoration:none;color:var(--gold)}
+.top nav{display:flex;gap:24px;flex-wrap:wrap}
+.top nav a{text-decoration:none;color:var(--muted);font-size:14px}
+.top nav a.on,.top nav a:hover{color:var(--gold-hi)}
+main{padding:56px 5vw 72px;max-width:1240px;margin:0 auto}
+.eyebrow{color:var(--gold-dk);font-weight:600;font-size:14px;letter-spacing:.04em}
+h1{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:clamp(34px,5vw,48px);margin:6px 0 14px}
+.lead{color:var(--muted);max-width:640px;line-height:1.7;margin:0 0 36px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.mapcard{position:relative;padding:18px 18px 0;overflow:hidden}
+#map{display:block;width:100%;height:auto;touch-action:manipulation}
+#map .d{stroke-width:.8;vector-effect:non-scaling-stroke;transition:opacity .5s,fill .25s;cursor:pointer}
+#map .free{fill:var(--gold);stroke:var(--gold)}
+#map .taken{fill:var(--wine);stroke:var(--wine)}
+#map.l0 .free.hl{fill:var(--gold-hi);stroke:var(--gold-hi)}
+#map.l0 .taken.hl{fill:var(--wine-hi);stroke:var(--wine-hi)}
+#map .regmesh{fill:none;stroke:var(--bg);stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linejoin:round;pointer-events:none;transition:opacity .5s}
+#map .outline{fill:none;stroke:var(--bg);stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+/* level 2 (inside region) */
+#map.l1 .d{opacity:.13;pointer-events:none}
+#map.l1 .d.sel{opacity:1;pointer-events:auto;stroke:var(--bg);stroke-width:1.4}
+#map.l1 .d.sel.free:hover,#map.l1 .d.sel.free.hl{fill:var(--gold-hi)}
+#map.l1 .d.sel.taken:hover,#map.l1 .d.sel.taken.hl{fill:var(--wine-hi)}
+#map.l1 .regmesh{opacity:0}
+/* markers */
+.mk{cursor:pointer;outline:none}
+.mk .bub{fill:var(--bg);stroke:var(--gold-hi);stroke-width:2;transition:fill .2s}
+.mk text{fill:var(--gold-hi);font:700 12.5px 'Manrope',sans-serif;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.mk.taken .bub{fill:var(--gold);stroke:var(--bg)}
+.mk.taken text{fill:var(--ink)}
+.mk.empty text{opacity:.55}
+.mk:hover .bub,.mk:focus-visible .bub{fill:var(--wine)}
+.mk.taken:hover .bub,.mk.taken:focus-visible .bub{fill:var(--gold-hi)}
+.mk .pin{fill:var(--bg);stroke:var(--gold-hi);stroke-width:2}
+.mk .halo{fill:none;stroke:var(--gold-hi);stroke-width:1.5;opacity:0}
+.mk.active .halo{opacity:.9}
+.back{position:absolute;left:28px;top:26px;z-index:3;display:none;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;
+  background:rgba(24,11,16,.85);border:1px solid var(--line);color:var(--gold-hi);font:600 13px 'Manrope',sans-serif;cursor:pointer;backdrop-filter:blur(4px)}
+.back:hover{border-color:var(--gold)}
+.back.show{display:inline-flex}
+.legend{display:flex;gap:26px;flex-wrap:wrap;margin:14px 0 0;padding:16px 4px 18px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:3px;margin-right:9px;vertical-align:-2px}
+.tip{position:absolute;z-index:4;pointer-events:none;background:rgba(24,11,16,.94);border:1px solid var(--line);color:var(--text);
+  font-size:13px;padding:6px 10px;border-radius:6px;white-space:nowrap;opacity:0;transition:opacity .12s;transform:translate(-50%,-140%)}
+.tip.show{opacity:1}
+.tip small{color:var(--muted);margin-left:6px}
+/* popover */
+.pop{position:absolute;z-index:6;width:250px;background:var(--card);border:1px solid var(--gold-dk);border-radius:10px;padding:14px 16px 14px;
+  box-shadow:0 12px 34px rgba(0,0,0,.55);transform:translate(-50%,-100%);display:none}
+.pop.show{display:block}
+.pop.below{transform:translate(-50%,0)}
+.pop h4{margin:0 22px 2px 0;font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:600}
+.pop .sub{color:var(--muted);font-size:12.5px;margin-bottom:10px}
+.pop .x{position:absolute;right:8px;top:6px;border:0;background:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+.pop .ag{padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.pop .ag b{display:block;font-weight:600;margin-bottom:3px}
+.pop .ag a{color:var(--gold-hi);text-decoration:none;display:block;line-height:1.7}
+.pop .ag a:hover{text-decoration:underline}
+.pop .none{color:var(--muted);font-size:14px;line-height:1.5;padding-top:10px;border-top:1px solid var(--line)}
+/* info card */
+.info{padding:28px 28px 30px;min-height:230px}
+.info .eyebrow{font-weight:500;color:var(--gold-dk);font-size:14px}
+.info h2{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:30px;margin:8px 0 12px}
+.info p{color:var(--muted);line-height:1.7;margin:0 0 14px;font-size:15px}
+.badge{display:inline-block;padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;margin-bottom:14px}
+.badge.free{background:rgba(212,168,90,.16);color:var(--gold-hi);border:1px solid var(--gold-dk)}
+.badge.taken{background:rgba(138,51,72,.3);color:#f0b9c4;border:1px solid var(--wine-hi)}
+.stats{display:flex;gap:22px;margin:4px 0 16px}
+.stats div{font-size:13px;color:var(--muted)}
+.stats b{display:block;font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:500;color:var(--gold-hi);line-height:1.1}
+.chips{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding-right:4px}
+.chip{border:1px solid var(--line);background:none;color:var(--text);border-radius:999px;padding:5px 11px;font:500 12.5px 'Manrope',sans-serif;cursor:pointer}
+.chip:hover{border-color:var(--gold);color:var(--gold-hi)}
+.chip em{font-style:normal;color:var(--gold);margin-left:6px}
+.note{margin-top:22px;color:var(--muted);font-size:12px;opacity:.7}
+footer{padding:26px 5vw;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="index.html">LUCENTO</a>
+  <nav>
+    <a href="index.html">Оптовым партнёрам</a>
+    <a class="on" href="regions.html">Карта регионов</a>
+    <a href="marketplaces.html">Розница</a>
+  </nav>
+</header>
+
+<main>
+  <div class="eyebrow">Карта</div>
+  <h1>Выберите регион</h1>
+  <p class="lead">Кликните область на карте, чтобы узнать, свободно ли эксклюзивное право представлять LUCENTO в этом регионе. Внутри области видны районы и наши агенты.</p>
+
+  <div class="grid">
+    <div class="card mapcard" id="mapcard">
+      <button class="back" id="back" type="button">← Вся карта</button>
+      <svg id="map" class="l0" role="img" aria-label="Карта регионов Узбекистана"></svg>
+      <div class="tip" id="tip"></div>
+      <div class="pop" id="pop" role="dialog" aria-live="polite"></div>
+      <div class="legend">
+        <span><i style="background:var(--gold)"></i>Регион свободен</span>
+        <span><i style="background:var(--wine)"></i>Представитель уже назначен</span>
+        <span><i style="background:var(--bg);border:2px solid var(--gold-hi)"></i>Число агентов</span>
+      </div>
+    </div>
+    <aside class="card info" id="info"></aside>
+  </div>
+</main>
+
+<footer>© 2026 LUCENTO — Ташкент, Узбекистан · Границы: <a href="https://www.geoboundaries.org" target="_blank" rel="noopener">geoBoundaries.org</a> (CC BY 3.0 IGO)</footer>
+
+<script src="map-data.js"></script>
+<script src="agents.js"></script>
+<script>
+(function(){
+const D=window.MAP_DATA, A=window.AGENTS||{}; A.regions=A.regions||{}; A.districts=A.districts||{};
+const NS='http://www.w3.org/2000/svg';
+const svg=document.getElementById('map'), card=document.getElementById('mapcard');
+const tip=document.getElementById('tip'), pop=document.getElementById('pop'), info=document.getElementById('info'), back=document.getElementById('back');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const el=(n,attrs={},parent)=>{const e=document.createElementNS(NS,n);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e};
+const lerp=(a,b,t)=>a+(b-a)*t, ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+
+const PAD=24, base={x:-PAD,y:-PAD,w:D.W+PAD*2,h:D.H+PAD*2}, ASPECT=base.w/base.h;
+svg.style.aspectRatio=base.w+' / '+base.h;
+let vb={...base};
+const status=code=>(A.regions[code]&&A.regions[code].status)==='taken'?'taken':'free';
+const dAgents=id=>(A.districts[id]&&A.districts[id].agents)||[];
+const dCount=id=>dAgents(id).length;
+const rCount=code=>D.districts.filter(d=>d.region===code).reduce((s,d)=>s+dCount(d.id),0);
+const R={}; D.regions.forEach(r=>R[r.id]=r);
+
+/* ---- layers ---- */
+const gD=el('g',{},svg), gM=el('g',{},svg);
+el('path',{d:D.regionMesh,class:'regmesh'},svg); el('path',{d:D.outline,class:'outline'},svg);
+const gMk=el('g',{},svg);
+D.districts.forEach(d=>{
+  const p=el('path',{d:d.d,class:'d '+status(d.region),'data-r':d.region,'data-id':d.id,'fill-rule':'evenodd'},gD);
+  d.el=p;
+});
+/* markers */
+function makeMarker(kind,obj){
+  const g=el('g',{class:'mk',tabindex:0,role:'button'},gMk);
+  el('circle',{class:'halo',r:20},g); el('circle',{class:'bub',r:kind==='r'?16:14},g);
+  const t=el('text',{},g); g.txt=t; g.kind=kind; g.obj=obj; obj.mk=g; refreshMarker(obj);
+  return g;
+}
+function refreshMarker(o){
+  const g=o.mk, n=g.kind==='r'?rCount(o.id):dCount(o.id);
+  g.txt.textContent=n; g.classList.toggle('empty',n===0);
+  g.setAttribute('aria-label',o.name+': агентов '+n);
+}
+D.regions.forEach(r=>{const g=makeMarker('r',r); g.classList.toggle('taken',status(r.id)==='taken');});
+D.districts.forEach(d=>{const g=makeMarker('d',d); g.style.display='none'; g.classList.toggle('taken',status(d.region)==='taken');});
+
+/* ---- state / animation ---- */
+let level=0, cur=null, q=0, raf=null;      // q: 0 = country, 1 = region opened
+let animRegion=null;
+function fitBox(bb){
+  const pad=.12, w0=(bb[2]-bb[0])*(1+pad*2), h0=(bb[3]-bb[1])*(1+pad*2);
+  const w=Math.max(w0,h0*ASPECT), h=w/ASPECT;
+  return {x:(bb[0]+bb[2])/2-w/2,y:(bb[1]+bb[3])/2-h/2,w,h};
+}
+function render(){
+  svg.setAttribute('viewBox',vb.x+' '+vb.y+' '+vb.w+' '+vb.h);
+  const s=vb.w/svg.clientWidth;
+  D.regions.forEach(r=>{
+    const vis=1-q; r.mk.style.opacity=vis; r.mk.style.pointerEvents=q>.3?'none':'auto';
+    r.mk.style.display=vis<.02?'none':'';
+    r.mk.setAttribute('transform','translate('+r.cx+' '+r.cy+') scale('+s+')');
+  });
+  if(animRegion){
+    const rg=R[animRegion], e=ease(q);
+    D.districts.forEach(d=>{
+      if(d.region!==animRegion){d.mk.style.display='none';return}
+      d.mk.style.display=q<.02?'none':''; d.mk.style.opacity=Math.min(1,q*1.6);
+      d.mk.style.pointerEvents=q>.7?'auto':'none';
+      d.mk.setAttribute('transform','translate('+lerp(rg.cx,d.cx,e)+' '+lerp(rg.cy,d.cy,e)+') scale('+s+')');
+    });
+  }
+}
+function animate(toVb,toQ,dur,done){
+  cancelAnimationFrame(raf);
+  const f=Object.assign({},vb), q0=q, t0=performance.now();
+  (function step(now){
+    const t=Math.min(1,(now-t0)/dur), e=ease(t);
+    vb={x:lerp(f.x,toVb.x,e),y:lerp(f.y,toVb.y,e),w:lerp(f.w,toVb.w,e),h:lerp(f.h,toVb.h,e)};
+    q=lerp(q0,toQ,t); render();
+    if(t<1) raf=requestAnimationFrame(step); else if(done) done();
+  })(t0);
+}
+function openRegion(code){
+  closePop(); hideTip();
+  if(level===1 && cur===code) return;
+  if(level===1) D.districts.forEach(d=>{if(d.region===cur)d.mk.style.display='none'});
+  cur=code; level=1; animRegion=code; q=level===1&&q>0.5?q:q;
+  D.districts.forEach(d=>{d.el.classList.toggle('sel',d.region===code);});
+  svg.classList.remove('l0'); svg.classList.add('l1');
+  back.classList.add('show');
+  animate(fitBox(R[code].bbox),1,900);
+  showRegionInfo(code);
+}
+function closeRegion(){
+  if(level===0) return;
+  closePop(); hideTip();
+  level=0; const prev=cur; cur=null;
+  svg.classList.remove('l1'); svg.classList.add('l0');
+  back.classList.remove('show');
+  animate(base,0,800,()=>{animRegion=null;D.districts.forEach(d=>{d.el.classList.remove('sel')});render()});
+  showDefaultInfo();
+}
+
+/* ---- info card ---- */
+function showDefaultInfo(){
+  info.innerHTML='<div class="eyebrow">Регион</div><h2>Выберите область</h2><p>Нажмите на любую область на карте слева — здесь появится статус партнёрства и условия для этого региона.</p>';
+}
+function statusBlock(code){
+  return status(code)==='taken'
+   ? '<span class="badge taken">Представитель уже назначен</span>'
+   : '<span class="badge free">Регион свободен</span>';
+}
+function showRegionInfo(code,preview){
+  const r=R[code], nd=r.n, na=rCount(code);
+  let h='<div class="eyebrow">Регион</div><h2>'+esc(r.name)+'</h2>'+statusBlock(code);
+  h+='<div class="stats"><div><b>'+na+'</b>агентов</div><div><b>'+nd+'</b>районов</div></div>';
+  if(preview){
+    h+='<p>'+(status(code)==='taken'?'Эксклюзивное право на этот регион уже закреплено.':'Эксклюзивное право на регион пока свободно.')+' Нажмите, чтобы приблизить и увидеть районы.</p>';
+  } else {
+    h+='<p style="margin-bottom:10px">Районы — нажмите, чтобы открыть контакты:</p><div class="chips">';
+    D.districts.filter(d=>d.region===code).forEach(d=>{
+      h+='<button class="chip" type="button" data-id="'+d.id+'">'+esc(d.name)+'<em>'+dCount(d.id)+'</em></button>';
+    });
+    h+='</div>';
+  }
+  info.innerHTML=h;
+}
+info.addEventListener('click',e=>{
+  const c=e.target.closest('.chip'); if(!c) return;
+  const d=D.districts.find(x=>x.id===c.dataset.id); if(d) openPop(d);
+});
+
+/* ---- popover ---- */
+let activeMk=null;
+function closePop(){pop.classList.remove('show'); if(activeMk){activeMk.classList.remove('active');activeMk=null}}
+function openPop(d){
+  if(level!==1 || q<.95) return;
+  closePop(); hideTip();
+  const ags=dAgents(d.id);
+  let h='<button class="x" type="button" aria-label="Закрыть">×</button><h4>'+esc(d.name)+'</h4><div class="sub">'+esc(R[d.region].name)+' · агентов: '+ags.length+'</div>';
+  if(!ags.length) h+='<div class="none">Агент в этом районе пока не назначен.</div>';
+  ags.forEach(a=>{
+    h+='<div class="ag"><b>'+esc(a.name||'Агент')+'</b>';
+    if(a.phone) h+='<a href="tel:'+esc(String(a.phone).replace(/[^\d+]/g,''))+'">'+esc(a.phone)+'</a>';
+    if(a.telegram) h+='<a target="_blank" rel="noopener" href="https://t.me/'+esc(String(a.telegram).replace(/^@/,''))+'">'+esc(a.telegram)+'</a>';
+    if(a.email) h+='<a href="mailto:'+esc(a.email)+'">'+esc(a.email)+'</a>';
+    h+='</div>';
+  });
+  pop.innerHTML=h; pop.classList.add('show');
+  d.mk.classList.add('active'); activeMk=d.mk;
+  const cr=card.getBoundingClientRect(), mr=d.mk.getBoundingClientRect();
+  let x=mr.left+mr.width/2-cr.left, y=mr.top-cr.top-6;
+  const half=125; x=Math.max(half+8,Math.min(cr.width-half-8,x));
+  const below=y<pop.offsetHeight+16;
+  pop.classList.toggle('below',below);
+  pop.style.left=x+'px'; pop.style.top=(below?mr.bottom-cr.top+6:y)+'px';
+}
+pop.addEventListener('click',e=>{if(e.target.closest('.x'))closePop()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){pop.classList.contains('show')?closePop():closeRegion()}});
+document.addEventListener('click',e=>{if(!e.target.closest('.pop,.mk,.chip'))closePop()});
+back.addEventListener('click',closeRegion);
+
+/* ---- tooltip ---- */
+function showTip(o,ev,txt,small){
+  const cr=card.getBoundingClientRect();
+  tip.innerHTML=esc(txt)+(small?'<small>'+esc(small)+'</small>':'');
+  tip.style.left=(ev.clientX-cr.left)+'px'; tip.style.top=(ev.clientY-cr.top)+'px'; tip.classList.add('show');
+}
+function hideTip(){tip.classList.remove('show')}
+const byId={}; D.districts.forEach(d=>byId[d.id]=d);
+
+/* ---- interaction ---- */
+function hlRegion(code,on){D.districts.forEach(d=>{if(d.region===code)d.el.classList.toggle('hl',on)})}
+gD.addEventListener('mousemove',e=>{
+  const p=e.target.closest('.d'); if(!p) return;
+  const d=byId[p.dataset.id];
+  if(level===0){ showTip(d,e,R[d.region].name,rCount(d.region)+' аг.'); }
+  else if(d.region===cur){ showTip(d,e,d.name,dCount(d.id)+' аг.'); }
+});
+gD.addEventListener('mouseover',e=>{
+  if(level!==0) return; const p=e.target.closest('.d'); if(!p) return;
+  hlRegion(p.dataset.r,true); showRegionInfo(p.dataset.r,true);
+});
+gD.addEventListener('mouseout',e=>{
+  const p=e.target.closest('.d'); if(!p) return; hideTip();
+  if(level===0){hlRegion(p.dataset.r,false); showDefaultInfo()}
+});
+gD.addEventListener('click',e=>{
+  const p=e.target.closest('.d'); if(!p) return; const d=byId[p.dataset.id];
+  if(level===0) openRegion(d.region); else if(d.region===cur) openPop(d);
+});
+function markerAct(g){
+  if(g.kind==='r') openRegion(g.obj.id); else openPop(g.obj);
+}
+gMk.addEventListener('click',e=>{const g=e.target.closest('.mk'); if(g){e.stopPropagation();markerAct(g)}});
+gMk.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const g=e.target.closest('.mk'); if(g){e.preventDefault();markerAct(g)}}});
+gMk.addEventListener('mousemove',e=>{
+  const g=e.target.closest('.mk'); if(!g) return;
+  const o=g.obj, n=g.kind==='r'?rCount(o.id):dCount(o.id);
+  showTip(o,e,o.name,n+' аг.');
+});
+gMk.addEventListener('mouseover',e=>{const g=e.target.closest('.mk'); if(g&&g.kind==='r'&&level===0){hlRegion(g.obj.id,true);showRegionInfo(g.obj.id,true)}});
+gMk.addEventListener('mouseout',e=>{const g=e.target.closest('.mk'); if(!g) return; hideTip(); if(g.kind==='r'&&level===0){hlRegion(g.obj.id,false);showDefaultInfo()}});
+window.addEventListener('resize',()=>{render(); closePop()});
+
+showDefaultInfo(); render();
+})();
+</script>
+</body>
+</html>
